@@ -1,0 +1,10 @@
+{
+  "language": "languageConstants/1005",
+  "language_name": "中文 (繁體)",
+  "geo_target": "geoTargetConstants/2392",
+  "geo_target_name": "台灣",
+  "keyword_plan_network": "GOOGLE_SEARCH",
+  "include_competency": true,
+  "max_retries": 3,
+  "cache_ttl_hours": 24
+}

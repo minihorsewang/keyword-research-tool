@@ -1,7 +1,10 @@
+import argparse
 import sys
 import logging
 from pathlib import Path
 from datetime import datetime
+
+import pandas as pd
 
 from src.csv_loader import load_csv
 from src.data_cleaner import clean_data
@@ -11,6 +14,11 @@ from src.keyword_cluster import cluster_keywords
 from src.page_planner import plan_pages
 from src.excel_exporter import export_excel
 from src.override import load_overrides, apply_classify_overrides, apply_cluster_overrides
+from src.keyword_input import resolve_seed_keywords
+from src.google_ads_client import get_client
+from src.keyword_query import query_with_retry
+from src.google_result_mapper import results_to_dataframe
+from src.query_cache import get_cached, save_cache
 from src.utils import (
     load_json, ensure_dirs, get_input_files,
     CONFIG_DIR, INPUT_DIR, OUTPUT_DIR, LOGS_DIR
@@ -31,91 +39,145 @@ def setup_logging():
     return logging.getLogger(__name__)
 
 
+def run_csv_flow(logger):
+    logger.info("執行 CSV 分析流程")
+    column_aliases = load_json("column_aliases.json")
+
+    input_files = get_input_files()
+    if not input_files:
+        print("錯誤：找不到 CSV 檔案。請將 Keyword Planner 匯出的 CSV 放入 input 資料夾。")
+        sys.exit(1)
+
+    all_data = []
+    for f in input_files:
+        df = load_csv(f, column_aliases)
+        all_data.append(df)
+
+    df = pd.concat(all_data, ignore_index=True)
+    original_count = len(df)
+    raw_df = df.copy()
+
+    df_clean, empty_count, dup_count = clean_data(df)
+    valid_count = len(df_clean)
+
+    return df_clean, raw_df, {
+        "source": "CSV",
+        "original_count": original_count,
+        "empty_count": empty_count,
+        "dup_count": dup_count,
+        "valid_count": valid_count,
+        "input_files": [f.name for f in input_files],
+    }
+
+
+def run_google_flow(logger, cli_keywords):
+    logger.info("執行 Google Ads API 查詢流程")
+    seed_keywords = resolve_seed_keywords(cli_keywords)
+
+    cached = get_cached(seed_keywords)
+    if cached is not None:
+        df = pd.DataFrame(cached)
+    else:
+        client = get_client()
+        customer_id = client.config.get("login_customer_id", "").lstrip("0") or "0"
+        results = query_with_retry(client, customer_id, seed_keywords)
+        df = results_to_dataframe(results, seed_keywords)
+        save_cache(seed_keywords, df.to_dict(orient="records"))
+
+    original_count = len(df)
+    raw_df = df.copy()
+
+    df_clean, empty_count, dup_count = clean_data(df)
+    valid_count = len(df_clean)
+
+    return df_clean, raw_df, {
+        "source": "Google Ads API",
+        "seed_keywords": seed_keywords,
+        "original_count": original_count,
+        "empty_count": empty_count,
+        "dup_count": dup_count,
+        "valid_count": valid_count,
+    }
+
+
+def run_analysis_pipeline(df_clean, raw_df, source_info, logger):
+    categories = load_json("categories.json")
+    intent_rules = load_json("intent_rules.json")
+    business_rules = load_json("business_rules.json")
+
+    df_classified = classify(df_clean, categories, intent_rules)
+    irrelevant_count = int(df_classified["是否可能無關"].sum())
+
+    classify_rules, cluster_rules = load_overrides(CONFIG_DIR, INPUT_DIR)
+    df_classified = apply_classify_overrides(df_classified, classify_rules)
+
+    df_scored = score(df_classified, business_rules)
+
+    clusters = cluster_keywords(df_scored, categories)
+    clusters = apply_cluster_overrides(clusters, df_scored, cluster_rules)
+
+    pages = plan_pages(clusters, df_scored)
+
+    high_count = int((df_scored["優先級"] == "高").sum())
+    similar_count = int(df_clean["是否高度相似"].sum())
+
+    if source_info["source"] == "CSV":
+        input_label = "、".join(source_info["input_files"])
+    else:
+        input_label = "、".join(source_info["seed_keywords"])
+
+    summary_data = {
+        "資料來源": source_info["source"],
+        "原始關鍵字數": source_info["original_count"],
+        "空白關鍵字數": source_info["empty_count"],
+        "完全重複關鍵字數": source_info["dup_count"],
+        "高度相似關鍵字數": similar_count,
+        "有效關鍵字數": source_info["valid_count"],
+        "可能無關數量": irrelevant_count,
+        "高優先關鍵字數": high_count,
+        "輸入": input_label,
+        "分析日期": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    }
+
+    output_path = export_excel(df_scored, clusters, pages, OUTPUT_DIR, summary_data, raw_df=raw_df)
+
+    print(f"\n分析完成")
+    print(f"資料來源：{source_info['source']}")
+    print(f"原始資料：{source_info['original_count']} 筆")
+    print(f"  空白關鍵字：{source_info['empty_count']} 筆")
+    print(f"  完全重複：{source_info['dup_count']} 筆")
+    print(f"  高度相似：{similar_count} 筆")
+    print(f"有效關鍵字：{source_info['valid_count']} 筆")
+    print(f"高優先關鍵字：{high_count} 個")
+    print(f"報告位置：{output_path}")
+    logger.info(f"分析完成，輸出檔案: {output_path}")
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="台灣印刷關鍵字分析工具")
+    parser.add_argument(
+        "--source", choices=["csv", "google"], default="csv",
+        help="資料來源：csv (Keyword Planner), google (Google Ads API)"
+    )
+    parser.add_argument(
+        "--keywords",
+        help="種子關鍵字，逗號分隔（僅 google 模式）"
+    )
+    return parser.parse_args()
+
+
 def main():
     logger = setup_logging()
-    logger.info("=== 印刷關鍵字分析工具 開始執行 ===")
+    args = parse_args()
+    logger.info(f"=== 印刷關鍵字分析工具 開始執行（來源: {args.source}）===")
 
     try:
-        # 載入設定檔
-        logger.info("載入設定檔...")
-        column_aliases = load_json("column_aliases.json")
-        categories = load_json("categories.json")
-        intent_rules = load_json("intent_rules.json")
-        business_rules = load_json("business_rules.json")
+        if args.source == "google":
+            df_clean, raw_df, source_info = run_google_flow(logger, args.keywords)
+        else:
+            df_clean, raw_df, source_info = run_csv_flow(logger)
 
-        # 取得輸入檔案
-        input_files = get_input_files()
-        if not input_files:
-            print("錯誤：找不到 CSV 檔案。請將 Keyword Planner 匯出的 CSV 放入 input 資料夾。")
-            logger.error("找不到輸入檔案")
-            sys.exit(1)
-
-        input_file = input_files[0]
-        print(f"讀取檔案：{input_file.name}")
-
-        all_data = []
-        for f in input_files:
-            df = load_csv(f, column_aliases)
-            all_data.append(df)
-
-        import pandas as pd
-        df = pd.concat(all_data, ignore_index=True)
-        original_count = len(df)
-
-        # 清理資料
-        df_clean, empty_count, dup_count = clean_data(df)
-        valid_count = len(df_clean)
-
-        # 分類
-        df_classified = classify(df_clean, categories, intent_rules)
-        irrelevant_count = df_classified["是否可能無關"].sum()
-
-        # 人工覆寫分類
-        classify_rules, cluster_rules = load_overrides(CONFIG_DIR, INPUT_DIR)
-        df_classified = apply_classify_overrides(df_classified, classify_rules)
-
-        # 評分
-        df_scored = score(df_classified, business_rules)
-
-        # 分群
-        clusters = cluster_keywords(df_scored, categories)
-
-        # 人工覆寫分群
-        clusters = apply_cluster_overrides(clusters, df_scored, cluster_rules)
-
-        # 頁面規劃
-        pages = plan_pages(clusters, df_scored)
-
-        # 建立摘要資料
-        high_count = int((df_scored["優先級"] == "高").sum())
-        input_filenames = "、".join(f.name for f in input_files)
-        similar_count = int(df_clean["是否高度相似"].sum())
-        summary_data = {
-            "原始關鍵字數": original_count,
-            "空白關鍵字數": empty_count,
-            "完全重複關鍵字數": dup_count,
-            "高度相似關鍵字數": similar_count,
-            "有效關鍵字數": valid_count,
-            "可能無關數量": int(irrelevant_count),
-            "高優先關鍵字數": high_count,
-            "輸入檔案": input_filenames,
-            "分析日期": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        }
-
-        # 匯出 Excel（保留原始未清理資料給「原始資料」工作表）
-        output_path = export_excel(df_scored, clusters, pages, OUTPUT_DIR, summary_data, raw_df=df)
-
-        # 顯示結果
-        print(f"\n分析完成")
-        print(f"原始資料：{original_count} 筆")
-        print(f"  空白關鍵字：{empty_count} 筆")
-        print(f"  完全重複：{dup_count} 筆")
-        print(f"  高度相似：{similar_count} 筆")
-        print(f"有效關鍵字：{valid_count} 筆")
-        print(f"高優先關鍵字：{high_count} 個")
-        print(f"報告位置：{output_path}")
-
-        logger.info(f"分析完成，輸出檔案: {output_path}")
+        run_analysis_pipeline(df_clean, raw_df, source_info, logger)
         logger.info("=== 執行結束 ===")
 
     except FileNotFoundError as e:
