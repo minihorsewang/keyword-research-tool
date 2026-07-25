@@ -12,7 +12,7 @@ from src.classifier import classify
 from src.scorer import score
 from src.keyword_cluster import cluster_keywords
 from src.page_planner import plan_pages
-from src.excel_exporter import export_excel
+from src.excel_exporter import export_excel, export_google_report
 from src.override import load_overrides, apply_classify_overrides, apply_cluster_overrides
 from src.keyword_input import resolve_seed_keywords
 from src.google_ads_client import get_client, get_customer_id
@@ -74,10 +74,12 @@ def run_csv_flow(logger):
 def run_google_flow(logger, cli_keywords, cli_customer_id=None):
     logger.info("執行 Google Ads API 查詢流程")
     seed_keywords = resolve_seed_keywords(cli_keywords)
+    from_cache = False
 
     cached = get_cached(seed_keywords)
     if cached is not None:
         df = pd.DataFrame(cached)
+        from_cache = True
     else:
         client = get_client()
         customer_id = get_customer_id(client, cli_customer_id)
@@ -86,20 +88,32 @@ def run_google_flow(logger, cli_keywords, cli_customer_id=None):
         df = results_to_dataframe(results, seed_keywords)
         save_cache(seed_keywords, df.to_dict(orient="records"))
 
-    original_count = len(df)
-    raw_df = df.copy()
+    avg_volume = ""
+    if "平均每月搜尋量" in df.columns:
+        vals = pd.to_numeric(df["平均每月搜尋量"], errors="coerce")
+        avg_volume = f"{vals.mean():.0f}" if vals.notna().any() else ""
 
-    df_clean, empty_count, dup_count = clean_data(df)
-    valid_count = len(df_clean)
-
-    return df_clean, raw_df, {
-        "source": "Google Ads API",
+    from src.keyword_query import CONFIG as QUERY_CONFIG
+    query_info = {
+        "query_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "geo": QUERY_CONFIG.get("geo_target_name", "台灣"),
+        "language": QUERY_CONFIG.get("language_name", "中文 (繁體)"),
+        "network": QUERY_CONFIG.get("keyword_plan_network", "Google Search"),
+        "customer_id": get_customer_id(get_client(), cli_customer_id) if not from_cache else "（快取）",
+        "from_cache": from_cache,
         "seed_keywords": seed_keywords,
-        "original_count": original_count,
-        "empty_count": empty_count,
-        "dup_count": dup_count,
-        "valid_count": valid_count,
+        "avg_volume": avg_volume,
     }
+
+    output_path = export_google_report(df, OUTPUT_DIR, query_info)
+
+    print(f"\n查詢完成")
+    print(f"資料來源：Google Ads API")
+    print(f"種子關鍵字：{'、'.join(seed_keywords)}")
+    print(f"建議關鍵字：{len(df)} 個")
+    print(f"使用快取：{'是' if from_cache else '否'}")
+    print(f"報告位置：{output_path}")
+    logger.info(f"查詢完成，輸出檔案: {output_path}")
 
 
 def run_analysis_pipeline(df_clean, raw_df, source_info, logger):
@@ -179,11 +193,10 @@ def main():
 
     try:
         if args.source == "google":
-            df_clean, raw_df, source_info = run_google_flow(logger, args.keywords, args.customer_id)
+            run_google_flow(logger, args.keywords, args.customer_id)
         else:
             df_clean, raw_df, source_info = run_csv_flow(logger)
-
-        run_analysis_pipeline(df_clean, raw_df, source_info, logger)
+            run_analysis_pipeline(df_clean, raw_df, source_info, logger)
         logger.info("=== 執行結束 ===")
 
     except FileNotFoundError as e:

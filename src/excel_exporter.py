@@ -73,6 +73,56 @@ def write_sheet_detail(ws, df, columns, sheet_name=""):
     ws.auto_filter.ref = ws.dimensions
 
 
+def export_google_report(df, output_dir, query_info):
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"Google關鍵字查詢_{timestamp}.xlsx"
+    filepath = Path(output_dir) / filename
+
+    wb = Workbook()
+
+    # 1. 查詢摘要
+    ws_summary = wb.active
+    ws_summary.title = "查詢摘要"
+    ws_summary.cell(row=1, column=1, value="查詢摘要").font = Font(bold=True, size=14)
+    entries = [
+        ("查詢時間", query_info.get("query_time", "")),
+        ("資料來源", "Google Ads API"),
+        ("地區", query_info.get("geo", "台灣")),
+        ("語言", query_info.get("language", "中文 (繁體)")),
+        ("搜尋網路", query_info.get("network", "Google Search")),
+        ("Customer ID", query_info.get("customer_id", "")),
+        ("使用快取", "是" if query_info.get("from_cache") else "否"),
+        ("種子關鍵字", "、".join(query_info.get("seed_keywords", []))),
+        ("建議關鍵字數", len(df)),
+        ("平均每月搜尋量", query_info.get("avg_volume", "")),
+    ]
+    for idx, (key, val) in enumerate(entries, 3):
+        ws_summary.cell(row=idx, column=1, value=key).font = Font(bold=True)
+        ws_summary.cell(row=idx, column=2, value=val)
+    auto_width(ws_summary)
+
+    # 2. Google 關鍵字結果
+    ws_results = wb.create_sheet("Google 關鍵字結果")
+    result_columns = list(df.columns)
+    apply_header(ws_results, result_columns)
+    for row_idx, (_, row) in enumerate(df.iterrows(), 2):
+        for col_idx, col in enumerate(result_columns, 1):
+            val = row.get(col, "")
+            if isinstance(val, float):
+                val = round(val, 2)
+            ws_results.cell(row=row_idx, column=col_idx, value=val)
+    auto_width(ws_results)
+    ws_results.freeze_panes = "A2"
+    ws_results.auto_filter.ref = ws_results.dimensions
+
+    for ws in wb.worksheets:
+        ws.sheet_properties.tabColor = "4472C4"
+
+    wb.save(filepath)
+    logger.info(f"Google 查詢報告已匯出: {filepath}")
+    return filepath
+
+
 def export_excel(df, clusters, pages, output_dir, summary_data, raw_df=None):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"印刷關鍵字分析_{timestamp}.xlsx"
