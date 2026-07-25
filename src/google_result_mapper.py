@@ -13,6 +13,21 @@ COMPETITION_NAME_MAP = {
     "HIGH": "高",
 }
 
+MONTH_NAME_MAP = {
+    "JANUARY": 1,
+    "FEBRUARY": 2,
+    "MARCH": 3,
+    "APRIL": 4,
+    "MAY": 5,
+    "JUNE": 6,
+    "JULY": 7,
+    "AUGUST": 8,
+    "SEPTEMBER": 9,
+    "OCTOBER": 10,
+    "NOVEMBER": 11,
+    "DECEMBER": 12,
+}
+
 
 def micros_to_twd(micros):
     if micros is None or micros <= 0:
@@ -29,8 +44,11 @@ def extract_monthly_searches(metrics):
     monthly = {}
     if metrics and metrics.monthly_search_volumes:
         for ms in metrics.monthly_search_volumes:
-            key = f"{ms.year}-{ms.month + 1:02d}"
-            monthly[key] = ms.monthly_searches
+            month_name = ms.month.name if hasattr(ms.month, "name") else str(ms.month)
+            month_number = MONTH_NAME_MAP.get(month_name)
+            if month_number:
+                key = f"{ms.year}-{month_number:02d}"
+                monthly[key] = ms.monthly_searches
     return monthly
 
 

@@ -25,9 +25,9 @@ class FakeMetrics:
 
 
 class FakeMonthlyVolume:
-    def __init__(self, year, month, searches):
+    def __init__(self, year, month_name, searches):
         self.year = year
-        self.month = month
+        self.month = FakeEnum(month_name)
         self.monthly_searches = searches
 
 
@@ -71,7 +71,10 @@ def test_extract_monthly_searches_empty():
 
 
 def test_extract_monthly_searches_with_data():
-    volumes = [FakeMonthlyVolume(2026, 0, 500), FakeMonthlyVolume(2026, 6, 800)]
+    volumes = [
+        FakeMonthlyVolume(2026, "JANUARY", 500),
+        FakeMonthlyVolume(2026, "JULY", 800),
+    ]
     metrics = FakeMetrics(monthly=volumes)
     result = extract_monthly_searches(metrics)
     assert result == {"2026-01": 500, "2026-07": 800}
