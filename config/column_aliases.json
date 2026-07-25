@@ -1,0 +1,12 @@
+{
+  "keyword": ["keyword", "關鍵字", "キーワード", "keywords"],
+  "avg_monthly_searches": ["avg. monthly searches", "平均每月搜尋量", "月平均検索回数", "avg monthly searches", "average monthly searches"],
+  "competition": ["competition", "競爭程度", "競合性", "競爭", "competing"],
+  "competition_index": ["competition index", "競爭指數", "競爭指標", "競合指数"],
+  "top_of_page_bid_low": ["top of page bid low range", "頁首出價低範圍", "ページ上部入札単価（低）", "top of page bid low"],
+  "top_of_page_bid_high": ["top of page bid high range", "頁首出價高範圍", "ページ上部入札単価（高）", "top of page bid high"],
+  "three_month_change": ["three month change", "三個月變化", "3ヶ月の変化", "3 month change", "3-month change"],
+  "yoy_change": ["yoy change", "年增率", "前年比", "year over year change", "year-on-year change"],
+  "monthly_searches": ["monthly searches", "月份搜尋量", "每月搜尋量", "月別検索数"],
+  "currency": ["currency", "幣別", "通貨"]
+}
