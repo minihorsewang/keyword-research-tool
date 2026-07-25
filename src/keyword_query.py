@@ -17,14 +17,7 @@ def query_keyword_ideas(client, customer_id, seed_keywords):
     request.language = LANGUAGE_CHINESE
     request.geo_target_constants.append(GEO_TAIWAN)
     request.keyword_plan_network = NETWORK_GOOGLE_SEARCH
-    request.include_competency = True
-    request.include_unavailable = True
-
-    request.keyword_seed.keyword.text = seed_keywords[0]
-    for kw in seed_keywords[1:]:
-        keyword_info = client.get_type("KeywordSeedKeyword")
-        keyword_info.text = kw
-        request.keyword_seed.keywords.append(keyword_info)
+    request.keyword_seed.keywords.extend(seed_keywords)
 
     logger.info(f"查詢關鍵字: {seed_keywords}")
     response = keyword_plan_idea_service.generate_keyword_ideas(

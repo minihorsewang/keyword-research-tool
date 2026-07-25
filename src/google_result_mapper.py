@@ -6,9 +6,10 @@ logger = logging.getLogger(__name__)
 
 COMPETITION_MAP = {
     0: "未知",
-    1: "低",
-    2: "中",
-    3: "高",
+    1: "未知",
+    2: "低",
+    3: "中",
+    4: "高",
 }
 
 MONTH_MAP = {
@@ -29,10 +30,10 @@ def map_competition(enum_val):
 
 def extract_monthly_searches(metrics):
     monthly = {}
-    if metrics and metrics.monthly_searches:
-        for ms in metrics.monthly_searches:
+    if metrics and metrics.monthly_search_volumes:
+        for ms in metrics.monthly_search_volumes:
             key = f"{ms.year}-{MONTH_MAP.get(ms.month, str(ms.month))}"
-            monthly[key] = ms.searches
+            monthly[key] = ms.monthly_searches
     return monthly
 
 

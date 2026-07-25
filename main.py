@@ -15,7 +15,7 @@ from src.page_planner import plan_pages
 from src.excel_exporter import export_excel
 from src.override import load_overrides, apply_classify_overrides, apply_cluster_overrides
 from src.keyword_input import resolve_seed_keywords
-from src.google_ads_client import get_client
+from src.google_ads_client import get_client, get_customer_id
 from src.keyword_query import query_with_retry
 from src.google_result_mapper import results_to_dataframe
 from src.query_cache import get_cached, save_cache
@@ -70,7 +70,7 @@ def run_csv_flow(logger):
     }
 
 
-def run_google_flow(logger, cli_keywords):
+def run_google_flow(logger, cli_keywords, cli_customer_id=None):
     logger.info("執行 Google Ads API 查詢流程")
     seed_keywords = resolve_seed_keywords(cli_keywords)
 
@@ -79,7 +79,8 @@ def run_google_flow(logger, cli_keywords):
         df = pd.DataFrame(cached)
     else:
         client = get_client()
-        customer_id = client.config.get("login_customer_id", "").lstrip("0") or "0"
+        customer_id = get_customer_id(client, cli_customer_id)
+        logger.info(f"查詢帳戶 ID: {customer_id}")
         results = query_with_retry(client, customer_id, seed_keywords)
         df = results_to_dataframe(results, seed_keywords)
         save_cache(seed_keywords, df.to_dict(orient="records"))
@@ -163,6 +164,10 @@ def parse_args():
         "--keywords",
         help="種子關鍵字，逗號分隔（僅 google 模式）"
     )
+    parser.add_argument(
+        "--customer-id",
+        help="Google Ads 帳戶 ID（10 位數字，去掉橫線）"
+    )
     return parser.parse_args()
 
 
@@ -173,7 +178,7 @@ def main():
 
     try:
         if args.source == "google":
-            df_clean, raw_df, source_info = run_google_flow(logger, args.keywords)
+            df_clean, raw_df, source_info = run_google_flow(logger, args.keywords, args.customer_id)
         else:
             df_clean, raw_df, source_info = run_csv_flow(logger)
 
