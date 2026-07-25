@@ -7,7 +7,16 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 CACHE_DIR = Path(__file__).resolve().parent.parent / "cache"
-CACHE_TTL_HOURS = 24
+
+
+def _get_ttl():
+    config_path = Path(__file__).resolve().parent.parent / "config" / "google_query.json"
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            config = json.load(f)
+        return config.get("cache_ttl_hours", 24)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return 24
 
 
 def _hash_keywords(keywords):
@@ -29,7 +38,8 @@ def get_cached(keywords):
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
         cached_time = datetime.fromisoformat(data["cached_at"])
-        if datetime.now() - cached_time > timedelta(hours=CACHE_TTL_HOURS):
+        ttl = _get_ttl()
+        if datetime.now() - cached_time > timedelta(hours=ttl):
             logger.info(f"快取已過期: {cache_key}")
             return None
         logger.info(f"使用快取資料: {cache_key}")
