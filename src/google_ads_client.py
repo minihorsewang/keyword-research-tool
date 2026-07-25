@@ -74,8 +74,8 @@ def validate_customer_id(cid, label="Customer ID"):
 
 def get_customer_id(client, cli_customer_id=None):
     if cli_customer_id:
-        validate_customer_id(cli_customer_id, "--customer-id")
-        return cli_customer_id
+        return validate_customer_id(cli_customer_id, "--customer-id")
+
     qconfig = _load_query_config()
     raw = qconfig.get("customer_id", "")
     if not raw:
@@ -85,18 +85,17 @@ def get_customer_id(client, cli_customer_id=None):
             '  2. 使用 --customer-id 1234567890 指定\n'
             "（注意：customer_id 不要寫在 google-ads.yaml，該檔案不支援此欄位）"
         )
-    validate_customer_id(raw, "customer_id")
+    cleaned = validate_customer_id(raw, "customer_id")
 
     mcc = client.config.get("login_customer_id", "")
     if mcc:
         mcc_clean = mcc.replace("-", "").strip()
-        cust_clean = raw.replace("-", "").strip()
-        if mcc_clean and mcc_clean == cust_clean:
+        if mcc_clean and mcc_clean == cleaned:
             logger.warning(
                 "login_customer_id（MCC）與 customer_id 相同（均為 %s），\n"
-                "請確認這是受管帳戶而非 MCC 帳戶本身。", cust_clean
+                "請確認這是受管帳戶而非 MCC 帳戶本身。", cleaned
             )
         else:
-            logger.info("MCC 帳戶：%s → 查詢帳戶：%s", mcc_clean, cust_clean)
+            logger.info("MCC 帳戶：%s → 查詢帳戶：%s", mcc_clean, cleaned)
 
-    return raw
+    return cleaned

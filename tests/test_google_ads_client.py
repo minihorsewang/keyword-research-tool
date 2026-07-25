@@ -127,6 +127,14 @@ def test_get_customer_id_from_cli_leading_zero():
     print("  PASS: CLI 前導零保留")
 
 
+def test_get_customer_id_from_cli_removes_dashes():
+    client = MagicMock()
+    result = get_customer_id(client, "123-456-7890")
+    assert result == "1234567890"
+    assert "-" not in result
+    print("  PASS: CLI 橫線自動移除")
+
+
 @patch("src.google_ads_client._load_query_config")
 def test_get_customer_id_from_query_config(mock_load):
     mock_load.return_value = {"customer_id": "9876543210"}
@@ -208,6 +216,7 @@ def run_all_tests():
         ("customer_id 含非數字", test_validate_customer_id_non_digit),
         ("CLI 指定 customer_id", test_get_customer_id_from_cli),
         ("CLI 前導零保留", test_get_customer_id_from_cli_leading_zero),
+        ("CLI 橫線自動移除", test_get_customer_id_from_cli_removes_dashes),
         ("Query config 讀取 customer_id", test_get_customer_id_from_query_config),
         ("缺少 customer_id 拋錯", test_get_customer_id_missing_no_config),
         ("MCC 警告", test_get_customer_id_mcc_warning),
