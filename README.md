@@ -21,7 +21,7 @@
 - Google API 結果接回現有 Excel 分析流程
 - Basic Access 審核通過後的正式帳戶驗收
 
-> **目前版本定位：V1.1 API 認證與申請階段完成，正在等待 Basic Access 審核並準備開發關鍵字查詢功能。**
+> **目前版本定位：V1.2 開發準備階段。API 認證與 Basic Access 申請已完成，下一步正式進入 Python 關鍵字查詢模組開發。**
 
 ---
 
@@ -526,47 +526,457 @@ keyword_research/
 
 ---
 
-## 下一階段開發順序
+## 下一階段開發程序
 
-### V1.2：Google Ads API 最小可用查詢
+下一階段全部以 **Python 命令列版本**為主，先完成穩定可用的 Google Ads API 查詢流程，再接回既有分類、評分與 Excel 報表。
 
-下一步優先完成：
+### 開發原則
+
+- 先完成 Google 原始查詢，不先修改分類與評分模組
+- 每個功能拆成獨立 Python 模組
+- 敏感憑證只從 `google-ads.yaml` 讀取
+- 不在程式碼、Log、Excel 或 README 中寫入 Token
+- Basic Access 尚未核准時，先完成程式與 Mock 測試
+- Basic Access 核准後，再用正式帳戶執行真實資料驗收
+
+### 第一階段：種子關鍵字輸入
+
+新增：
 
 ```text
-讀取 keywords.txt 或 --keywords
-        ↓
-清理與去重
-        ↓
-呼叫 GenerateKeywordIdeas
-        ↓
-限定台灣與中文
-        ↓
-取得關鍵字、搜尋量、競爭程度與出價
-        ↓
-輸出簡單 Excel
+src/keyword_input.py
+input/keywords.txt
 ```
 
-### V1.3：月份趨勢與查詢紀錄
+支援兩種輸入方式。
 
-加入：
+#### 方式一：文字檔
 
-- 月份搜尋量
-- 三個月變化
-- 年增率
-- 查詢條件
-- 查詢快取
-- API 執行紀錄
+```text
+input/keywords.txt
+```
 
-### V1.4：接回進階分析
+範例：
 
-最後再接回：
+```text
+貼紙印刷
+標籤印刷
+彩盒印刷
+```
 
-- 印刷產品分類
-- 搜尋意圖
+預計執行方式：
+
+```bash
+python main.py --source google
+```
+
+#### 方式二：命令列輸入
+
+```bash
+python main.py --keywords "貼紙印刷,標籤印刷,彩盒印刷"
+```
+
+`keyword_input.py` 應負責：
+
+- 去除前後空白
+- 排除空白行
+- 去除重複詞
+- 驗證至少有一個有效關鍵字
+- 限制單次種子詞數量
+- 回傳乾淨的 Python `list[str]`
+- 記錄本次實際使用的種子關鍵字
+
+驗收條件：
+
+- [ ] 可讀取 `input/keywords.txt`
+- [ ] 可讀取 `--keywords`
+- [ ] 可去除空白與重複詞
+- [ ] 空輸入時有清楚錯誤
+- [ ] 可正確回傳種子詞清單
+
+---
+
+### 第二階段：建立 Google Ads Client
+
+新增：
+
+```text
+src/google_ads_client.py
+```
+
+此模組只負責：
+
+- 找到專案根目錄
+- 檢查 `google-ads.yaml` 是否存在
+- 讀取 Google Ads API 憑證
+- 建立 `GoogleAdsClient`
+- 將 Google Ads Client 提供給其他模組
+- 將設定錯誤轉成清楚的中文訊息
+
+不得在此模組中：
+
+- 執行關鍵字查詢
+- 輸出 Excel
+- 寫入真實 Token
+- 將憑證內容寫入 Log
+
+驗收條件：
+
+- [ ] 可從專案根目錄載入 `google-ads.yaml`
+- [ ] 找不到設定檔時有清楚錯誤
+- [ ] 設定格式錯誤時有清楚錯誤
+- [ ] 可成功建立 `GoogleAdsClient`
+- [ ] 不會輸出任何敏感憑證
+
+---
+
+### 第三階段：Google 關鍵字查詢
+
+新增：
+
+```text
+src/keyword_query.py
+```
+
+主要呼叫：
+
+```text
+KeywordPlanIdeaService.GenerateKeywordIdeas
+```
+
+第一版只需要取得：
+
+- Google 建議關鍵字
+- 平均每月搜尋量
+- 競爭程度
+- 競爭指數
+- 頁首出價低標
+- 頁首出價高標
+
+第一版暫時不處理：
+
+- 複雜月份趨勢
 - 商業機會評分
-- 關鍵字分群
-- 網站頁面建議
+- 網站頁面規劃
+- 自動分類
+- 查詢快取
 
+`keyword_query.py` 應負責：
+
+- 接收乾淨的種子詞清單
+- 接收正式 Google Ads Customer ID
+- 建立 `GenerateKeywordIdeasRequest`
+- 套用台灣與中文查詢條件
+- 呼叫 Google Ads API
+- 回傳 Google 原始結果
+- 捕捉 Google Ads API 錯誤
+
+驗收條件：
+
+- [ ] 可建立 `GenerateKeywordIdeasRequest`
+- [ ] 可傳入多個種子關鍵字
+- [ ] 可呼叫 `GenerateKeywordIdeas`
+- [ ] 可取得建議詞與關鍵字指標
+- [ ] Basic Access 未核准時有明確提示
+- [ ] Customer ID 錯誤時有明確提示
+
+---
+
+### 第四階段：固定台灣與中文查詢條件
+
+新增：
+
+```text
+config/google_query.json
+```
+
+建議內容：
+
+```json
+{
+  "country": "Taiwan",
+  "language": "Chinese",
+  "network": "GOOGLE_SEARCH",
+  "include_adult_keywords": false
+}
+```
+
+程式必須正確設定：
+
+- 台灣 Geo Target Constant
+- 中文 Language Constant
+- Google Search Network
+- 成人關鍵字是否包含
+
+每次查詢必須在摘要與 Log 中記錄：
+
+```text
+地區：台灣
+語言：中文
+搜尋網路：Google Search
+```
+
+驗收條件：
+
+- [ ] 查詢地區固定為台灣
+- [ ] 查詢語言固定為中文
+- [ ] 搜尋網路固定為 Google Search
+- [ ] 查詢條件會寫入結果摘要
+- [ ] 不會誤查全球或其他語言資料
+
+---
+
+### 第五階段：Google API 結果轉換
+
+新增：
+
+```text
+src/google_result_mapper.py
+```
+
+此模組負責把 Google API 回傳資料轉成 pandas DataFrame。
+
+第一版欄位：
+
+```text
+種子關鍵字
+建議關鍵字
+平均每月搜尋量
+競爭程度
+競爭指數
+頁首出價低標
+頁首出價高標
+查詢地區
+查詢語言
+查詢時間
+```
+
+必要轉換：
+
+- `micros` 除以 `1,000,000`
+- 搜尋量轉成整數
+- 空值安全處理
+- 競爭程度轉成中文
+- 相同建議詞去重
+- 欄位名稱統一
+- 資料型別統一
+
+競爭程度對照：
+
+```text
+LOW → 低
+MEDIUM → 中
+HIGH → 高
+UNSPECIFIED → 未提供
+```
+
+驗收條件：
+
+- [ ] 可將 Google 結果轉成 DataFrame
+- [ ] 可正確換算 micros
+- [ ] 空值不會造成程式中斷
+- [ ] 可正確轉換競爭程度
+- [ ] 可移除重複建議詞
+- [ ] 可保留種子詞與建議詞關係
+
+---
+
+### 第六階段：最小可用 Excel 輸出
+
+第一版先輸出簡單報告，不接回全部進階分析。
+
+輸出檔名：
+
+```text
+output/Google關鍵字查詢_YYYYMMDD_HHMMSS.xlsx
+```
+
+第一版工作表：
+
+| 工作表 | 說明 |
+|---|---|
+| 查詢摘要 | 查詢時間、種子詞、結果數量、地區、語言與 Customer ID |
+| Google 關鍵字結果 | Google API 回傳並整理後的完整資料 |
+
+第一版暫不輸出：
+
+- 高交易機會關鍵字
+- 關鍵字分群
+- 網站頁面規劃
+- 商業機會評分
+- 月份趨勢圖表
+
+驗收條件：
+
+- [ ] 可產生 Excel
+- [ ] 可正常開啟 Excel
+- [ ] 查詢摘要內容正確
+- [ ] Google 關鍵字結果欄位正確
+- [ ] 不會把 Token 或憑證寫入 Excel
+- [ ] 檔名包含查詢時間
+
+---
+
+### 第七階段：錯誤處理
+
+需要處理：
+
+- `google-ads.yaml` 不存在
+- OAuth 或 Refresh Token 失效
+- Developer Token 尚未取得 Basic Access
+- MCC ID 格式錯誤
+- Customer ID 錯誤
+- 使用者無權存取 Customer ID
+- API 配額或頻率限制
+- 網路中斷
+- 查無關鍵字結果
+- 一次輸入過多種子詞
+- Excel 檔案被其他程式占用
+
+Basic Access 尚未通過時，應顯示：
+
+```text
+目前 Developer Token 尚未取得 Basic Access，
+無法查詢正式 Google Ads 帳戶。
+請等待 Google 審核，或改用測試帳戶。
+```
+
+不得只顯示：
+
+```text
+程式錯誤
+```
+
+---
+
+### 第八階段：測試
+
+新增：
+
+```text
+tests/test_keyword_input.py
+tests/test_google_ads_client.py
+tests/test_google_result_mapper.py
+tests/test_keyword_query_mock.py
+tests/test_google_excel_output.py
+```
+
+Basic Access 尚未核准前：
+
+- 使用 Mock 模擬 Google API 回傳結果
+- 測試資料轉換
+- 測試錯誤處理
+- 測試 Excel 輸出
+- 不依賴正式帳戶資料
+
+Basic Access 核准後：
+
+- 使用少量種子詞執行正式查詢
+- 確認台灣與中文條件
+- 對照 Google Keyword Planner 畫面
+- 確認搜尋量、競爭程度與出價
+- 確認 Excel 欄位與筆數
+- 保存一份正式驗收紀錄
+
+---
+
+### 第九階段：接回既有分析流程
+
+只有在 Google 原始查詢與簡單 Excel 穩定後，才進行：
+
+```text
+Google API 結果
+        ↓
+clean_data()
+        ↓
+分類
+        ↓
+搜尋意圖
+        ↓
+商業機會評分
+        ↓
+關鍵字分群
+        ↓
+完整 Excel 報告
+```
+
+接回時需確認：
+
+- Google API 欄位名稱與現有 CSV 欄位一致
+- 原始資料不能在清理時遺失
+- 月份資料需完整保留
+- 評分公式需先修正
+- 多分類結果不能只取第一個分類
+- 不可讓大量關鍵字同時得到 100 分
+
+---
+
+## V1.2 驗收標準
+
+V1.2 完成時，必須符合：
+
+- [ ] 可從 `keywords.txt` 輸入種子詞
+- [ ] 可從 `--keywords` 輸入種子詞
+- [ ] 可載入 `google-ads.yaml`
+- [ ] 可建立 Google Ads Client
+- [ ] 可呼叫 `GenerateKeywordIdeas`
+- [ ] 查詢地區為台灣
+- [ ] 查詢語言為中文
+- [ ] 搜尋網路為 Google Search
+- [ ] 可取得搜尋量、競爭程度與出價
+- [ ] 可轉成 pandas DataFrame
+- [ ] 可輸出最小可用 Excel
+- [ ] Basic Access 未核准時有清楚訊息
+- [ ] 不會把敏感憑證寫入 Log、Excel 或 GitHub
+- [ ] 有 Mock 測試
+- [ ] Basic Access 核准後完成正式帳戶驗收
+
+---
+
+## 預計新增的檔案
+
+```text
+keyword_research/
+├─ input/
+│  └─ keywords.txt
+├─ config/
+│  └─ google_query.json
+├─ src/
+│  ├─ keyword_input.py
+│  ├─ google_ads_client.py
+│  ├─ keyword_query.py
+│  └─ google_result_mapper.py
+└─ tests/
+   ├─ test_keyword_input.py
+   ├─ test_google_ads_client.py
+   ├─ test_google_result_mapper.py
+   ├─ test_keyword_query_mock.py
+   └─ test_google_excel_output.py
+```
+
+---
+
+## 開發執行順序
+
+```text
+1. keyword_input.py
+        ↓
+2. google_ads_client.py
+        ↓
+3. google_query.json
+        ↓
+4. keyword_query.py
+        ↓
+5. google_result_mapper.py
+        ↓
+6. 最小可用 Excel
+        ↓
+7. Mock 測試與錯誤處理
+        ↓
+8. Basic Access 核准後正式驗收
+        ↓
+9. 接回現有分類、評分與完整報表
+```
 ---
 
 ## 非目前核心範圍
