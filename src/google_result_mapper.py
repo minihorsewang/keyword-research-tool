@@ -4,12 +4,12 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-COMPETITION_MAP = {
-    0: "未知",
-    1: "未知",
-    2: "低",
-    3: "中",
-    4: "高",
+COMPETITION_NAME_MAP = {
+    "UNSPECIFIED": "未知",
+    "UNKNOWN": "未知",
+    "LOW": "低",
+    "MEDIUM": "中",
+    "HIGH": "高",
 }
 
 MONTH_MAP = {
@@ -25,7 +25,8 @@ def micros_to_twd(micros):
 
 
 def map_competition(enum_val):
-    return COMPETITION_MAP.get(enum_val, "未知")
+    name = enum_val.name if hasattr(enum_val, "name") else str(enum_val)
+    return COMPETITION_NAME_MAP.get(name, "未知")
 
 
 def extract_monthly_searches(metrics):
