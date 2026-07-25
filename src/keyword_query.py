@@ -21,6 +21,49 @@ def load_query_config():
 CONFIG = load_query_config()
 
 
+RETRIABLE_ERRORS = {"RATE_LIMIT_EXCEEDED",}
+
+
+def format_google_ads_error(error):
+    parts = [f"Request ID：{error.request_id}"]
+    for api_error in error.failure.errors:
+        code = api_error.error_code
+        msg = api_error.message
+
+        if code.authentication_error:
+            parts.append(f"認證錯誤：{code.authentication_error.name}")
+        elif code.authorization_error:
+            auth_code = code.authorization_error.name
+            if auth_code == "DEVELOPER_TOKEN_NOT_APPROVED":
+                parts.append(
+                    "Developer Token 尚未取得 Basic Access。\n"
+                    "無法查詢正式 Google Ads 帳戶。"
+                )
+            elif auth_code in ("DEVELOPER_TOKEN_NOT_ALLOWED", "CUSTOMER_NOT_FOUND"):
+                parts.append(f"授權錯誤：{auth_code} — 請確認 Customer ID 是否正確且有權限存取。")
+            else:
+                parts.append(f"授權錯誤：{auth_code}")
+        elif code.rate_limit_error:
+            parts.append(f"配額限制：{code.rate_limit_error.name}")
+        elif code.keyword_plan_idea_error:
+            parts.append(f"關鍵字查詢錯誤：{code.keyword_plan_idea_error.name}")
+        else:
+            parts.append(f"錯誤代碼：{code.WhichOneof('error_code') or 'unknown'}")
+
+        if msg:
+            parts.append(f"說明：{msg}")
+
+    return "\n".join(parts)
+
+
+def is_retriable(error):
+    for api_error in error.failure.errors:
+        code = api_error.error_code
+        if code.rate_limit_error and code.rate_limit_error.name in RETRIABLE_ERRORS:
+            return True
+    return False
+
+
 def query_keyword_ideas(client, customer_id, seed_keywords, config=None):
     if config is None:
         config = CONFIG
@@ -47,11 +90,15 @@ def query_keyword_ideas(client, customer_id, seed_keywords, config=None):
 def query_with_retry(client, customer_id, seed_keywords, max_retries=None):
     if max_retries is None:
         max_retries = CONFIG.get("max_retries", 3)
+    last_error = None
     for attempt in range(max_retries):
         try:
             return query_keyword_ideas(client, customer_id, seed_keywords)
         except GoogleAdsException as e:
-            logger.warning(f"API 查詢失敗 (第 {attempt+1} 次): {e}")
-            if attempt == max_retries - 1:
+            last_error = e
+            detail = format_google_ads_error(e)
+            logger.warning(f"API 查詢失敗 (第 {attempt+1}/{max_retries} 次):\n{detail}")
+            if not is_retriable(e):
+                logger.error("非可重試錯誤，停止重試")
                 raise
-    return []
+    raise last_error

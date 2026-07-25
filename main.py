@@ -16,7 +16,8 @@ from src.excel_exporter import export_excel
 from src.override import load_overrides, apply_classify_overrides, apply_cluster_overrides
 from src.keyword_input import resolve_seed_keywords
 from src.google_ads_client import get_client, get_customer_id
-from src.keyword_query import query_with_retry
+from google.ads.googleads.errors import GoogleAdsException
+from src.keyword_query import query_with_retry, format_google_ads_error
 from src.google_result_mapper import results_to_dataframe
 from src.query_cache import get_cached, save_cache
 from src.utils import (
@@ -192,6 +193,11 @@ def main():
     except ValueError as e:
         print(f"錯誤：{e}")
         logger.error(f"資料錯誤: {e}", exc_info=True)
+        sys.exit(1)
+    except GoogleAdsException as e:
+        detail = format_google_ads_error(e)
+        print(f"\nGoogle Ads API 錯誤：\n{detail}")
+        logger.error(f"Google Ads API 錯誤:\n{detail}", exc_info=True)
         sys.exit(1)
     except Exception as e:
         print(f"執行失敗：{e}")
