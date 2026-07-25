@@ -47,19 +47,16 @@ def test_chinese_columns():
 
 def test_big5_csv():
     print("=== 3. Big5 CSV ===")
-    try:
-        df = load_csv(os.path.join(DATA_DIR, "test_big5.csv"), column_aliases)
-        assert len(df) > 0
-        print(f"  PASS: Big5 編碼讀取成功，讀取 {len(df)} 筆")
-    except Exception:
-        print("  WARN: Big5 測試檔案需以 Big5 編碼儲存，確認實際編碼")
+    df = load_csv(os.path.join(DATA_DIR, "test_big5.csv"), column_aliases)
+    assert len(df) > 0
+    print(f"  PASS: Big5 編碼讀取成功，讀取 {len(df)} 筆")
 
 
 def test_missing_column():
     print("=== 4. 缺少必要欄位 ===")
     try:
         load_csv(os.path.join(DATA_DIR, "test_missing_column.csv"), column_aliases)
-        print("  FAIL: 應該拋出錯誤")
+        assert False, "應該拋出 ValueError"
     except ValueError as e:
         assert "關鍵字" in str(e)
         print(f"  PASS: 正確拋出錯誤: {e}")
@@ -126,7 +123,7 @@ def test_empty_file():
     print("=== 11. 空白檔案 ===")
     try:
         load_csv(os.path.join(DATA_DIR, "test_empty.csv"), column_aliases)
-        print("  FAIL: 應該拋出錯誤")
+        assert False, "應該拋出 ValueError"
     except ValueError:
         print("  PASS: 正確處理空白檔案")
 
