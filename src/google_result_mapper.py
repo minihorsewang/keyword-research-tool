@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 
 import pandas as pd
 
@@ -10,11 +11,6 @@ COMPETITION_NAME_MAP = {
     "LOW": "低",
     "MEDIUM": "中",
     "HIGH": "高",
-}
-
-MONTH_MAP = {
-    0: "1", 1: "2", 2: "3", 3: "4", 4: "5", 5: "6",
-    6: "7", 7: "8", 8: "9", 9: "10", 10: "11", 11: "12",
 }
 
 
@@ -33,12 +29,25 @@ def extract_monthly_searches(metrics):
     monthly = {}
     if metrics and metrics.monthly_search_volumes:
         for ms in metrics.monthly_search_volumes:
-            key = f"{ms.year}-{MONTH_MAP.get(ms.month, str(ms.month))}"
+            key = f"{ms.year}-{ms.month + 1:02d}"
             monthly[key] = ms.monthly_searches
     return monthly
 
 
-def results_to_dataframe(results, seed_keywords):
+def _match_seed(text, seed_keywords):
+    text_lower = text.lower()
+    best = None
+    best_len = 0
+    for seed in seed_keywords:
+        s = seed.lower()
+        if s in text_lower or text_lower in s:
+            if len(s) > best_len:
+                best = seed
+                best_len = len(s)
+    return best if best else "綜合"
+
+
+def results_to_dataframe(results, seed_keywords, query_info=None):
     rows = []
 
     for idea in results:
@@ -48,6 +57,7 @@ def results_to_dataframe(results, seed_keywords):
             rows.append({
                 "原始關鍵字": text,
                 "標準化關鍵字": text,
+                "來源種子詞": _match_seed(text, seed_keywords),
             })
             continue
 
@@ -56,9 +66,10 @@ def results_to_dataframe(results, seed_keywords):
         row = {
             "原始關鍵字": text,
             "標準化關鍵字": text,
-            "平均每月搜尋量": metrics.avg_monthly_searches if metrics.avg_monthly_searches > 0 else None,
+            "來源種子詞": _match_seed(text, seed_keywords),
+            "平均每月搜尋量": metrics.avg_monthly_searches,
             "競爭程度": map_competition(metrics.competition),
-            "競爭指數": metrics.competition_index if metrics.competition_index > 0 else None,
+            "競爭指數": metrics.competition_index,
             "頁首出價低": micros_to_twd(metrics.low_top_of_page_bid_micros),
             "頁首出價高": micros_to_twd(metrics.high_top_of_page_bid_micros),
             "幣別": "TWD",
@@ -68,5 +79,10 @@ def results_to_dataframe(results, seed_keywords):
         rows.append(row)
 
     df = pd.DataFrame(rows)
+
+    df["查詢地區"] = (query_info or {}).get("geo", "台灣")
+    df["查詢語言"] = (query_info or {}).get("language", "中文 (繁體)")
+    df["查詢時間"] = (query_info or {}).get("query_time", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+
     logger.info(f"轉換 {len(df)} 筆 API 結果為 DataFrame")
     return df

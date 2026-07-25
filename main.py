@@ -76,6 +76,14 @@ def run_google_flow(logger, cli_keywords, cli_customer_id=None):
     seed_keywords = resolve_seed_keywords(cli_keywords)
     from_cache = False
 
+    from src.keyword_query import CONFIG as QUERY_CONFIG
+    query_info = {
+        "query_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "geo": QUERY_CONFIG.get("geo_target_name", "台灣"),
+        "language": QUERY_CONFIG.get("language_name", "中文 (繁體)"),
+        "network": QUERY_CONFIG.get("keyword_plan_network", "Google Search"),
+    }
+
     cached = get_cached(seed_keywords)
     if cached is not None:
         df = pd.DataFrame(cached)
@@ -84,8 +92,9 @@ def run_google_flow(logger, cli_keywords, cli_customer_id=None):
         client = get_client()
         customer_id = get_customer_id(client, cli_customer_id)
         logger.info(f"查詢帳戶 ID: {customer_id}")
+        query_info["customer_id"] = customer_id
         results = query_with_retry(client, customer_id, seed_keywords)
-        df = results_to_dataframe(results, seed_keywords)
+        df = results_to_dataframe(results, seed_keywords, query_info)
         save_cache(seed_keywords, df.to_dict(orient="records"))
 
     avg_volume = ""
@@ -93,17 +102,10 @@ def run_google_flow(logger, cli_keywords, cli_customer_id=None):
         vals = pd.to_numeric(df["平均每月搜尋量"], errors="coerce")
         avg_volume = f"{vals.mean():.0f}" if vals.notna().any() else ""
 
-    from src.keyword_query import CONFIG as QUERY_CONFIG
-    query_info = {
-        "query_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "geo": QUERY_CONFIG.get("geo_target_name", "台灣"),
-        "language": QUERY_CONFIG.get("language_name", "中文 (繁體)"),
-        "network": QUERY_CONFIG.get("keyword_plan_network", "Google Search"),
-        "customer_id": get_customer_id(get_client(), cli_customer_id) if not from_cache else "（快取）",
-        "from_cache": from_cache,
-        "seed_keywords": seed_keywords,
-        "avg_volume": avg_volume,
-    }
+    query_info["customer_id"] = query_info.get("customer_id", "（快取）")
+    query_info["from_cache"] = from_cache
+    query_info["seed_keywords"] = seed_keywords
+    query_info["avg_volume"] = avg_volume
 
     output_path = export_google_report(df, OUTPUT_DIR, query_info)
 
