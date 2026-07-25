@@ -5,7 +5,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import yaml
 from src.google_ads_client import (
     get_client, get_customer_id, validate_customer_id,
-    _translate_yaml_error,
+    _translate_yaml_error, _load_query_config,
 )
 
 
@@ -127,32 +127,25 @@ def test_get_customer_id_from_cli_leading_zero():
     print("  PASS: CLI 前導零保留")
 
 
-def test_get_customer_id_from_config():
+@patch("src.google_ads_client._load_query_config")
+def test_get_customer_id_from_query_config(mock_load):
+    mock_load.return_value = {"customer_id": "9876543210"}
     client = MagicMock()
-    client.config = {"customer_id": "9876543210"}
     result = get_customer_id(client, None)
     assert result == "9876543210"
-    print("  PASS: 從 config 讀取 customer_id")
+    print("  PASS: 從 google_query.json 讀取 customer_id")
 
 
-def test_get_customer_id_placeholder():
+@patch("src.google_ads_client._load_query_config")
+def test_get_customer_id_missing_no_config(mock_load):
+    mock_load.return_value = {"customer_id": ""}
     client = MagicMock()
-    client.config = {"customer_id": "你的正式 Google Ads 帳戶 ID（去掉橫線）"}
     try:
         get_customer_id(client, None)
         assert False, "應該拋出 ValueError"
-    except ValueError:
-        print("  PASS: placeholder customer_id 拋錯")
-
-
-def test_get_customer_id_missing():
-    client = MagicMock()
-    client.config = {}
-    try:
-        get_customer_id(client, None)
-        assert False, "應該拋出 ValueError"
-    except ValueError:
-        print("  PASS: 缺少 customer_id 拋錯")
+    except ValueError as e:
+        assert "config/google_query.json" in str(e)
+        print("  PASS: 缺少 customer_id 拋錯（含正確提示）")
 
 
 def _capture_log(name, level, func):
@@ -178,8 +171,9 @@ def _capture_log(name, level, func):
 def test_get_customer_id_mcc_warning():
     def check():
         client = MagicMock()
-        client.config = {"customer_id": "1234567890", "login_customer_id": "1234567890"}
-        result = get_customer_id(client, None)
+        client.config = {"login_customer_id": "1234567890"}
+        with patch("src.google_ads_client._load_query_config", return_value={"customer_id": "1234567890"}):
+            result = get_customer_id(client, None)
         assert result == "1234567890"
     output = _capture_log("src.google_ads_client", logging.WARNING, check)
     assert "MCC" in output
@@ -189,8 +183,9 @@ def test_get_customer_id_mcc_warning():
 def test_get_customer_id_mcc_different():
     def check():
         client = MagicMock()
-        client.config = {"customer_id": "1111111111", "login_customer_id": "2222222222"}
-        result = get_customer_id(client, None)
+        client.config = {"login_customer_id": "2222222222"}
+        with patch("src.google_ads_client._load_query_config", return_value={"customer_id": "1111111111"}):
+            result = get_customer_id(client, None)
         assert result == "1111111111"
     output = _capture_log("src.google_ads_client", logging.INFO, check)
     assert "MCC" in output and "2222222222" in output
@@ -213,9 +208,8 @@ def run_all_tests():
         ("customer_id 含非數字", test_validate_customer_id_non_digit),
         ("CLI 指定 customer_id", test_get_customer_id_from_cli),
         ("CLI 前導零保留", test_get_customer_id_from_cli_leading_zero),
-        ("Config 讀取 customer_id", test_get_customer_id_from_config),
-        ("Placeholder 拋錯", test_get_customer_id_placeholder),
-        ("缺少 customer_id 拋錯", test_get_customer_id_missing),
+        ("Query config 讀取 customer_id", test_get_customer_id_from_query_config),
+        ("缺少 customer_id 拋錯", test_get_customer_id_missing_no_config),
         ("MCC 警告", test_get_customer_id_mcc_warning),
         ("MCC 不同", test_get_customer_id_mcc_different),
     ]

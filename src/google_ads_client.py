@@ -1,3 +1,4 @@
+import json
 import logging
 from pathlib import Path
 
@@ -26,6 +27,15 @@ def _translate_yaml_error(msg):
                 )
             return f"google-ads.yaml 缺少 {label}"
     return f"google-ads.yaml 設定錯誤：{msg}"
+
+
+def _load_query_config():
+    path = Path(__file__).resolve().parent.parent / "config" / "google_query.json"
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
 
 
 def get_client(config_path=None):
@@ -66,11 +76,14 @@ def get_customer_id(client, cli_customer_id=None):
     if cli_customer_id:
         validate_customer_id(cli_customer_id, "--customer-id")
         return cli_customer_id
-    raw = client.config.get("customer_id", "")
-    if not raw or raw == "你的正式 Google Ads 帳戶 ID（去掉橫線）":
+    qconfig = _load_query_config()
+    raw = qconfig.get("customer_id", "")
+    if not raw:
         raise ValueError(
-            "缺少 customer_id。請在 google-ads.yaml 設定正式查詢帳戶 ID，\n"
-            "或使用 --customer-id 1234567890 指定。"
+            "缺少 customer_id。請選擇一種方式：\n"
+            "  1. 在 config/google_query.json 設定 customer_id\n"
+            '  2. 使用 --customer-id 1234567890 指定\n'
+            "（注意：customer_id 不要寫在 google-ads.yaml，該檔案不支援此欄位）"
         )
     validate_customer_id(raw, "customer_id")
 
