@@ -52,14 +52,31 @@ def cluster_keywords(df, categories):
                     max_intent_score = score
                     max_intent = intent
 
-        primary = group_df.iloc[0]["標準化關鍵字"]
-        secondary = [kw for kw in group_df["標準化關鍵字"] if kw != primary]
-        priority = group_df["優先級"].value_counts().idxmax() if not group_df["優先級"].empty else "低"
+        # 主關鍵字由標準化分數最高者決定
+        if "標準化分數" in group_df.columns:
+            best_idx = group_df["標準化分數"].idxmax()
+            primary = str(df.at[best_idx, "標準化關鍵字"])
+        else:
+            primary = group_df.iloc[0]["標準化關鍵字"]
+
+        all_keywords = [kw for kw in group_df["標準化關鍵字"].unique() if kw != primary]
+
+        # 優先級改用加權平均分數
+        if "標準化分數" in group_df.columns:
+            avg_score = group_df["標準化分數"].mean()
+            if avg_score >= 60:
+                priority = "高"
+            elif avg_score >= 30:
+                priority = "中"
+            else:
+                priority = "低"
+        else:
+            priority = group_df["優先級"].value_counts().idxmax() if not group_df["優先級"].empty else "低"
 
         cluster_rows.append({
             "群組名稱": group_name,
             "主關鍵字": primary,
-            "次要關鍵字": "、".join(secondary[:5]),
+            "次要關鍵字": "、".join(all_keywords),
             "群組搜尋量": total_sv,
             "群組意圖": max_intent,
             "建議頁面": suggest_page_type(group_name, max_intent),

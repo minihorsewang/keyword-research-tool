@@ -10,10 +10,18 @@ logger = logging.getLogger(__name__)
 
 def detect_encoding(filepath):
     encodings = ["utf-8-sig", "utf-8", "big5", "cp950", "cp1252", "latin-1"]
+    raw_bytes = open(filepath, "rb").read(2000)
     for enc in encodings:
         try:
-            with open(filepath, "r", encoding=enc) as f:
-                f.read(2000)
+            decoded = raw_bytes.decode(enc)
+            # 檢查是否包含中文字元
+            has_chinese = any("\u4e00" <= ch <= "\u9fff" for ch in decoded)
+            # 若檔案含有中文，但此編碼解不出中文，跳過
+            if not has_chinese:
+                # 檢查 raw_bytes 中是否有常見 UTF-8/Big5 中文字節特徵
+                has_cjk_bytes = any(b > 0x7f for b in raw_bytes)
+                if has_cjk_bytes and enc in ["cp1252", "latin-1"]:
+                    continue
             logger.info(f"編碼辨識成功: {enc} - {filepath}")
             return enc
         except (UnicodeDecodeError, UnicodeError):
@@ -24,10 +32,17 @@ def detect_encoding(filepath):
 
 def detect_delimiter(filepath, encoding):
     with open(filepath, "r", encoding=encoding) as f:
-        sample = f.read(5000)
-    tab_count = sample.count("\t")
-    comma_count = sample.count(",")
-    return "\t" if tab_count > comma_count else ","
+        first_line = f.readline()
+    # 用 csv 模組 Sniffer 偵測
+    try:
+        dialect = csv.Sniffer().sniff(first_line)
+        delimiter = dialect.delimiter
+    except Exception:
+        # 手動判斷
+        tab_count = first_line.count("\t")
+        comma_count = first_line.count(",")
+        delimiter = "\t" if tab_count > comma_count else ","
+    return delimiter
 
 
 def resolve_columns(df, column_aliases):

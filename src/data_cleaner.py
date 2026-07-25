@@ -47,8 +47,9 @@ def clean_data(df):
     df["標準化關鍵字"] = df["標準化關鍵字"].fillna("").astype(str)
 
     empty_mask = df["標準化關鍵字"] == ""
+    empty_count = int(empty_mask.sum())
     df = df[~empty_mask]
-    logger.info(f"移除 {empty_mask.sum()} 筆空白關鍵字")
+    logger.info(f"移除 {empty_count} 筆空白關鍵字")
 
     seen = {}
     duplicate_flags = []
@@ -76,6 +77,8 @@ def clean_data(df):
     df["是否高度相似"] = similar_flags
     df["相似對象"] = similar_with
 
+    duplicate_count = int(sum(duplicate_flags))
     df_valid = df[~df["是否完全重複"]].copy()
-    logger.info(f"原始: {total} 筆, 移除完全重複後: {len(df_valid)} 筆, 高度相似: {sum(similar_flags)} 筆")
-    return df_valid
+    logger.info(f"原始: {total} 筆, 空白: {empty_count}, 完全重複: {duplicate_count}, "
+                f"有效: {len(df_valid)} 筆, 高度相似: {sum(similar_flags)} 筆")
+    return df_valid, empty_count, duplicate_count

@@ -51,23 +51,31 @@ def classify(df, categories, intent_rules):
 
 
 def classify_category(text, category_list):
+    matched = []
     for cat in category_list:
         for kw in cat["keywords"]:
             if kw and kw.lower() in text:
-                return cat["name"]
-    if category_list:
+                matched.append(cat["name"])
+                break
+    if not matched and category_list:
         last = category_list[-1]
         if "其他" in last["name"] or "無關" in last["name"]:
             return last["name"]
-    return ""
+    return "、".join(matched) if matched else ""
 
 
 def classify_intent(text, intent_rules):
+    # 無關詞規則應優先檢查
+    irrelevant_rules = intent_rules.get("irrelevant", {})
+    for kw in irrelevant_rules.get("keywords", []):
+        if kw and kw.lower() in text:
+            return irrelevant_rules["label"], True
+    # 其餘意圖
     for key, rule in intent_rules.items():
+        if key == "irrelevant":
+            continue
         for kw in rule["keywords"]:
             if kw and kw.lower() in text:
-                if key == "irrelevant":
-                    return rule["label"], True
                 return rule["label"], False
     return "產品需求", False
 

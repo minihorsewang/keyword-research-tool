@@ -10,6 +10,7 @@ from src.scorer import score
 from src.keyword_cluster import cluster_keywords
 from src.page_planner import plan_pages
 from src.excel_exporter import export_excel
+from src.override import load_overrides, apply_classify_overrides, apply_cluster_overrides
 from src.utils import (
     load_json, ensure_dirs, get_input_files,
     CONFIG_DIR, INPUT_DIR, OUTPUT_DIR, LOGS_DIR
@@ -62,13 +63,16 @@ def main():
         original_count = len(df)
 
         # 清理資料
-        df_clean = clean_data(df)
+        df_clean, empty_count, dup_count = clean_data(df)
         valid_count = len(df_clean)
-        duplicate_count = original_count - valid_count
 
         # 分類
         df_classified = classify(df_clean, categories, intent_rules)
         irrelevant_count = df_classified["是否可能無關"].sum()
+
+        # 人工覆寫分類
+        classify_rules, cluster_rules = load_overrides(CONFIG_DIR, INPUT_DIR)
+        df_classified = apply_classify_overrides(df_classified, classify_rules)
 
         # 評分
         df_scored = score(df_classified, business_rules)
@@ -76,28 +80,38 @@ def main():
         # 分群
         clusters = cluster_keywords(df_scored, categories)
 
+        # 人工覆寫分群
+        clusters = apply_cluster_overrides(clusters, df_scored, cluster_rules)
+
         # 頁面規劃
         pages = plan_pages(clusters, df_scored)
 
         # 建立摘要資料
         high_count = int((df_scored["優先級"] == "高").sum())
+        input_filenames = "、".join(f.name for f in input_files)
+        similar_count = int(df_clean["是否高度相似"].sum())
         summary_data = {
             "原始關鍵字數": original_count,
+            "空白關鍵字數": empty_count,
+            "完全重複關鍵字數": dup_count,
+            "高度相似關鍵字數": similar_count,
             "有效關鍵字數": valid_count,
-            "重複關鍵字數": duplicate_count,
             "可能無關數量": int(irrelevant_count),
             "高優先關鍵字數": high_count,
-            "輸入檔案": input_file.name,
+            "輸入檔案": input_filenames,
             "分析日期": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         }
 
-        # 匯出 Excel
-        output_path = export_excel(df_scored, clusters, pages, OUTPUT_DIR, summary_data)
+        # 匯出 Excel（保留原始未清理資料給「原始資料」工作表）
+        output_path = export_excel(df_scored, clusters, pages, OUTPUT_DIR, summary_data, raw_df=df)
 
         # 顯示結果
         print(f"\n分析完成")
-        print(f"共處理：{original_count} 個關鍵字")
-        print(f"有效關鍵字：{valid_count} 個")
+        print(f"原始資料：{original_count} 筆")
+        print(f"  空白關鍵字：{empty_count} 筆")
+        print(f"  完全重複：{dup_count} 筆")
+        print(f"  高度相似：{similar_count} 筆")
+        print(f"有效關鍵字：{valid_count} 筆")
         print(f"高優先關鍵字：{high_count} 個")
         print(f"報告位置：{output_path}")
 

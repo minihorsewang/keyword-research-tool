@@ -68,7 +68,7 @@ def test_missing_column():
 def test_thousands():
     print("=== 5. 千分位數字 ===")
     df = load_csv(os.path.join(DATA_DIR, "test_thousands.csv"), column_aliases)
-    cleaned = clean_data(df)
+    cleaned, _, _ = clean_data(df)
     first = cleaned.iloc[0]
     assert safe_int(first["平均每月搜尋量"]) == 1200
     print("  PASS: 千分位數字處理正確")
@@ -77,7 +77,7 @@ def test_thousands():
 def test_less_than_10():
     print("=== 6. < 10 搜尋量 ===")
     df = load_csv(os.path.join(DATA_DIR, "test_less_than_10.csv"), column_aliases)
-    cleaned = clean_data(df)
+    cleaned, _, _ = clean_data(df)
     first = cleaned.iloc[0]
     val = safe_int(first["平均每月搜尋量"])
     assert val == 5 or val == 0
@@ -87,7 +87,7 @@ def test_less_than_10():
 def test_competition_lang():
     print("=== 7. 競爭程度中英文 ===")
     df = load_csv(os.path.join(DATA_DIR, "test_chinese_columns.csv"), column_aliases)
-    cleaned = clean_data(df)
+    cleaned, _, _ = clean_data(df)
     classified = classify(cleaned, categories, intent_rules)
     result = score(classified, business_rules)
     assert "競爭難度" in result.columns
@@ -97,7 +97,7 @@ def test_competition_lang():
 def test_duplicates():
     print("=== 8. 完全重複關鍵字 ===")
     df = load_csv(os.path.join(DATA_DIR, "test_duplicates.csv"), column_aliases)
-    cleaned = clean_data(df)
+    cleaned, _, _ = clean_data(df)
     duplicates = cleaned[cleaned["是否高度相似"]]
     assert len(cleaned) < len(df)
     print(f"  PASS: 原始 {len(df)} 筆 -> 有效 {len(cleaned)} 筆 (含相似)")
@@ -115,7 +115,7 @@ def test_normalize():
 def test_irrelevant():
     print("=== 10. 無關關鍵字 ===")
     df = load_csv(os.path.join(DATA_DIR, "test_irrelevant.csv"), column_aliases)
-    cleaned = clean_data(df)
+    cleaned, _, _ = clean_data(df)
     result = classify(cleaned, categories, intent_rules)
     irrelevant = result[result["是否可能無關"]]
     assert len(irrelevant) > 0
@@ -145,7 +145,7 @@ def test_similar():
 def test_classifier():
     print("=== 13. 分類功能 ===")
     df = load_csv(os.path.join(DATA_DIR, "test_utf8.csv"), column_aliases)
-    cleaned = clean_data(df)
+    cleaned, _, _ = clean_data(df)
     df_c = classify(cleaned, categories, intent_rules)
     assert "產品大類" in df_c.columns
     labels = df_c["產品大類"].value_counts()
@@ -155,7 +155,7 @@ def test_classifier():
 def test_full_pipeline():
     print("=== 14. 完整流程測試 ===")
     df = load_csv(os.path.join(DATA_DIR, "test_utf8.csv"), column_aliases)
-    df = clean_data(df)
+    df, _, _ = clean_data(df)
     df = classify(df, categories, intent_rules)
     df = score(df, business_rules)
     clusters = cluster_keywords(df, categories)
@@ -171,9 +171,8 @@ def test_large_data():
     df = pd.DataFrame(rows)
     column_aliases_local = {"keyword": ["keyword"], "avg_monthly_searches": ["avg. monthly searches"],
                             "competition": ["competition"], "competition_index": ["competition index"]}
-    # Use a mock - just test that clean/classify/score work on 100+ rows
     df["原始關鍵字"] = df["Keyword"]
-    cleaned = clean_data(df)
+    cleaned, _, _ = clean_data(df)
     assert len(cleaned) == 100
     print(f"  PASS: 100 筆資料處理成功")
 

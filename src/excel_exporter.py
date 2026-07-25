@@ -73,7 +73,7 @@ def write_sheet_detail(ws, df, columns, sheet_name=""):
     ws.auto_filter.ref = ws.dimensions
 
 
-def export_excel(df, clusters, pages, output_dir, summary_data):
+def export_excel(df, clusters, pages, output_dir, summary_data, raw_df=None):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"印刷關鍵字分析_{timestamp}.xlsx"
     filepath = Path(output_dir) / filename
@@ -151,11 +151,11 @@ def export_excel(df, clusters, pages, output_dir, summary_data):
     irr_columns = ["原始關鍵字", "標準化關鍵字", "平均每月搜尋量", "搜尋意圖"]
     write_sheet_detail(ws_irr, irr_df, irr_columns)
 
-    # 7. 原始資料
+    # 7. 原始資料（保留清理前的完整資料）
     ws_raw = wb.create_sheet("原始資料")
-    raw_columns = list(df.columns)
-    # remove semicolons properly
-    write_sheet_detail(ws_raw, df, raw_columns)
+    raw_source = raw_df if raw_df is not None else df
+    raw_columns = list(raw_source.columns)
+    write_sheet_detail(ws_raw, raw_source, raw_columns)
 
     # 8. 執行紀錄
     ws_log = wb.create_sheet("執行紀錄")
