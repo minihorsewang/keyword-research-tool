@@ -4,6 +4,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from src.keyword_input import (
     load_keywords_from_file, load_keywords_from_cli,
     clean_and_deduplicate, resolve_seed_keywords,
+    _normalize_whitespace, _validate_keywords,
+    MAX_KEYWORDS, MAX_KEYWORD_LENGTH,
 )
 
 
@@ -59,9 +61,30 @@ def test_clean_and_deduplicate():
 
 
 def test_clean_and_deduplicate_all_empty():
-    result = clean_and_deduplicate(["", "  ", "　"])
+    result = clean_and_deduplicate(["", " ", "  "])
     assert result == []
     print("  PASS: 全空白自動過濾")
+
+
+def test_clean_and_deduplicate_case_preserved():
+    raw = ["貼紙印刷", "貼紙印刷", "HELLO", "hello"]
+    result = clean_and_deduplicate(raw)
+    assert result == ["貼紙印刷", "HELLO"]
+    print("  PASS: 保留原始大小寫")
+
+
+def test_clean_and_deduplicate_whitespace_normalized():
+    raw = ["貼紙   印刷", "貼紙 印刷"]
+    result = clean_and_deduplicate(raw)
+    assert result == ["貼紙 印刷"]
+    print("  PASS: 多空白正規化為單一空白")
+
+
+def test_normalize_whitespace():
+    assert _normalize_whitespace("貼紙  印刷") == "貼紙 印刷"
+    assert _normalize_whitespace("  貼紙 印刷  ") == "貼紙 印刷"
+    assert _normalize_whitespace("貼紙印刷") == "貼紙印刷"
+    print("  PASS: 空白正規化函數")
 
 
 def test_resolve_seed_keywords_with_cli():
@@ -69,6 +92,36 @@ def test_resolve_seed_keywords_with_cli():
     assert "貼紙印刷" in result
     assert "標籤印刷" in result
     print("  PASS: resolve_seed_keywords 使用 CLI 參數")
+
+
+def test_validate_max_keywords():
+    many = [f"kw{i}" for i in range(MAX_KEYWORDS + 1)]
+    try:
+        _validate_keywords(many)
+        assert False, "應拋出 ValueError"
+    except ValueError as e:
+        assert "超過上限" in str(e)
+        print("  PASS: 超過最大數量拋錯")
+
+
+def test_validate_max_keywords_ok():
+    ok = [f"kw{i}" for i in range(MAX_KEYWORDS)]
+    _validate_keywords(ok)
+    print("  PASS: 未超過最大數量不拋錯")
+
+
+def test_validate_keyword_too_long():
+    try:
+        _validate_keywords(["a" * (MAX_KEYWORD_LENGTH + 1)])
+        assert False, "應拋出 ValueError"
+    except ValueError as e:
+        assert "超過上限" in str(e)
+        print("  PASS: 關鍵字太長拋錯")
+
+
+def test_validate_keyword_length_ok():
+    _validate_keywords(["a" * MAX_KEYWORD_LENGTH])
+    print("  PASS: 關鍵字長度在上限內不拋錯")
 
 
 def run_all_tests():
@@ -81,7 +134,14 @@ def run_all_tests():
         ("空 CLI 字串", test_load_keywords_from_cli_empty),
         ("去重與清理", test_clean_and_deduplicate),
         ("全空白自動過濾", test_clean_and_deduplicate_all_empty),
+        ("保留原始大小寫", test_clean_and_deduplicate_case_preserved),
+        ("多空白正規化", test_clean_and_deduplicate_whitespace_normalized),
+        ("空白正規化函數", test_normalize_whitespace),
         ("resolve seed keywords", test_resolve_seed_keywords_with_cli),
+        ("超過最大數量拋錯", test_validate_max_keywords),
+        ("未超過最大數量", test_validate_max_keywords_ok),
+        ("關鍵字太長拋錯", test_validate_keyword_too_long),
+        ("關鍵字長度正常", test_validate_keyword_length_ok),
     ]
     for name, func in tests:
         try:

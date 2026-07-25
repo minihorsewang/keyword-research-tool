@@ -50,7 +50,7 @@ def main():
             traceback.print_exc()
             ok = False
 
-        p = {"tests.test_runner": 15, "test_keyword_input": 8,
+        p = {"tests.test_runner": 15, "test_keyword_input": 15,
              "test_google_ads_client": 6, "test_google_result_mapper": 8,
              "test_keyword_query_mock": 11, "test_google_excel_output": 4}.get(mod_name, 0)
         if ok:

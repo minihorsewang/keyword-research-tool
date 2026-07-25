@@ -3,6 +3,9 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+MAX_KEYWORDS = 20
+MAX_KEYWORD_LENGTH = 100
+
 
 def load_keywords_from_file(filepath):
     filepath = Path(filepath)
@@ -26,17 +29,36 @@ def load_keywords_from_cli(keywords_str):
     return keywords
 
 
+def _normalize_whitespace(text):
+    return " ".join(text.split())
+
+
 def clean_and_deduplicate(keywords):
     seen = set()
     cleaned = []
     for kw in keywords:
-        norm = kw.strip().lower()
-        norm = " ".join(norm.split())
-        if norm and norm not in seen:
-            seen.add(norm)
-            cleaned.append(norm)
+        stripped = kw.strip()
+        if not stripped:
+            continue
+        normalized = _normalize_whitespace(stripped)
+        dedup_key = normalized.lower()
+        if dedup_key not in seen:
+            seen.add(dedup_key)
+            cleaned.append(normalized)
     logger.info(f"種子關鍵字清理後: {len(cleaned)} 個 (原始 {len(keywords)} 個)")
     return cleaned
+
+
+def _validate_keywords(keywords):
+    for kw in keywords:
+        if len(kw) > MAX_KEYWORD_LENGTH:
+            raise ValueError(
+                f"關鍵字「{kw[:20]}…」長度 {len(kw)} 超過上限 {MAX_KEYWORD_LENGTH} 字元"
+            )
+    if len(keywords) > MAX_KEYWORDS:
+        raise ValueError(
+            f"種子關鍵字數量 {len(keywords)} 超過上限 {MAX_KEYWORDS} 個"
+        )
 
 
 def resolve_seed_keywords(cli_keywords=None):
@@ -56,4 +78,5 @@ def resolve_seed_keywords(cli_keywords=None):
     cleaned = clean_and_deduplicate(raw)
     if not cleaned:
         raise ValueError("沒有有效的種子關鍵字")
+    _validate_keywords(cleaned)
     return cleaned
