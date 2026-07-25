@@ -11,3 +11,10 @@ logs/*.log
 dist/
 build/
 *.spec
+
+
+# Google Ads / OAuth credentials
+credentials.json
+client_secret*.json
+google-ads.yaml
+token.json
