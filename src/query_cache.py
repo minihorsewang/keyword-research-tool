@@ -19,8 +19,15 @@ def _get_ttl():
         return 24
 
 
-def _hash_keywords(keywords):
-    raw = ",".join(sorted(kw.strip().lower() for kw in keywords))
+def _build_cache_key(keywords, customer_id="", geo="", language="", network=""):
+    parts = [
+        ",".join(sorted(kw.strip().lower() for kw in keywords)),
+        customer_id.replace("-", "").strip() if customer_id else "",
+        geo.strip().lower() if geo else "",
+        language.strip().lower() if language else "",
+        network.strip().lower() if network else "",
+    ]
+    raw = "|".join(parts)
     return hashlib.md5(raw.encode()).hexdigest()
 
 
@@ -29,8 +36,8 @@ def _cache_path(cache_key):
     return CACHE_DIR / f"{cache_key}.json"
 
 
-def get_cached(keywords):
-    cache_key = _hash_keywords(keywords)
+def get_cached(keywords, customer_id="", geo="", language="", network=""):
+    cache_key = _build_cache_key(keywords, customer_id, geo, language, network)
     path = _cache_path(cache_key)
     if not path.exists():
         return None
@@ -48,12 +55,16 @@ def get_cached(keywords):
         return None
 
 
-def save_cache(keywords, results):
-    cache_key = _hash_keywords(keywords)
+def save_cache(keywords, results, customer_id="", geo="", language="", network=""):
+    cache_key = _build_cache_key(keywords, customer_id, geo, language, network)
     path = _cache_path(cache_key)
     data = {
         "cached_at": datetime.now().isoformat(),
         "seed_keywords": keywords,
+        "customer_id": customer_id,
+        "geo": geo,
+        "language": language,
+        "network": network,
         "results": results,
     }
     with open(path, "w", encoding="utf-8") as f:

@@ -84,7 +84,15 @@ def run_google_flow(logger, cli_keywords, cli_customer_id=None):
         "network": QUERY_CONFIG.get("keyword_plan_network", "Google Search"),
     }
 
-    cached = get_cached(seed_keywords)
+    def _cache_ctx(cid=""):
+        return {
+            "customer_id": cid,
+            "geo": query_info.get("geo", ""),
+            "language": query_info.get("language", ""),
+            "network": query_info.get("network", ""),
+        }
+
+    cached = get_cached(seed_keywords, **_cache_ctx())
     if cached is not None:
         df = pd.DataFrame(cached)
         from_cache = True
@@ -95,7 +103,7 @@ def run_google_flow(logger, cli_keywords, cli_customer_id=None):
         query_info["customer_id"] = customer_id
         results = query_with_retry(client, customer_id, seed_keywords)
         df = results_to_dataframe(results, seed_keywords, query_info)
-        save_cache(seed_keywords, df.to_dict(orient="records"))
+        save_cache(seed_keywords, df.to_dict(orient="records"), **_cache_ctx(customer_id))
 
     avg_volume = ""
     if "平均每月搜尋量" in df.columns:
