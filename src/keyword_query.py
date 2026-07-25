@@ -1,5 +1,6 @@
 import json
 import logging
+import time
 from pathlib import Path
 
 from google.ads.googleads.errors import GoogleAdsException
@@ -101,4 +102,8 @@ def query_with_retry(client, customer_id, seed_keywords, max_retries=None):
             if not is_retriable(e):
                 logger.error("非可重試錯誤，停止重試")
                 raise
+            if attempt < max_retries - 1:
+                wait = 2 ** attempt
+                logger.warning(f"等待 {wait} 秒後重試…")
+                time.sleep(wait)
     raise last_error
